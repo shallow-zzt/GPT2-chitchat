@@ -10,7 +10,7 @@ from datetime import datetime
 from tqdm import tqdm
 from torch.nn import DataParallel
 import logging
-from transformers.modeling_gpt2 import GPT2Config, GPT2LMHeadModel
+from transformers import GPT2Config, GPT2LMHeadModel
 from transformers import BertTokenizer
 from os.path import join, exists
 from itertools import zip_longest, chain
@@ -18,7 +18,7 @@ from dataset import MyDataset
 from torch.utils.data import Dataset, DataLoader
 from torch.nn import CrossEntropyLoss
 from sklearn.model_selection import train_test_split
-from train_origin import create_model
+#from train_origin import create_model
 import torch.nn.functional as F
 import copy
 
@@ -34,13 +34,13 @@ def set_interact_args():
     parser.add_argument('--device', default='0', type=str, required=False, help='生成设备')
     parser.add_argument('--temperature', default=1, type=float, required=False, help='生成的temperature')
     parser.add_argument('--topk', default=8, type=int, required=False, help='最高k选1')
-    parser.add_argument('--topp', default=0, type=float, required=False, help='最高积累概率')
+    parser.add_argument('--topp', default=0.5, type=float, required=False, help='最高积累概率')
     parser.add_argument('--model_config', default='config/model_config_dialogue_small.json', type=str, required=False,
                         help='模型参数')
     parser.add_argument('--log_path', default='data/interacting_mmi.log', type=str, required=False,
                         help='interact_mmi日志存放位置')
-    parser.add_argument('--voca_path', default='vocab/vocab_small.txt', type=str, required=False, help='选择词库')
-    parser.add_argument('--dialogue_model_path', default='dialogue_model/', type=str, required=False,
+    parser.add_argument('--voca_path', default='vocab/vocab.txt', type=str, required=False, help='选择词库')
+    parser.add_argument('--dialogue_model_path', default='model/', type=str, required=False,
                         help='dialogue_model路径')
     parser.add_argument('--mmi_model_path', default='mmi_model/', type=str, required=False,
                         help='互信息mmi_model路径')
@@ -48,7 +48,7 @@ def set_interact_args():
     parser.add_argument('--repetition_penalty', default=1.0, type=float, required=False,
                         help="重复惩罚参数，若生成的对话重复性较高，可适当提高该参数")
     parser.add_argument('--seed', type=int, default=None, help='设置种子用于生成随机数，以使得训练的结果是确定的')
-    parser.add_argument('--max_len', type=int, default=25, help='每个utterance的最大长度,超过指定长度则进行截断')
+    parser.add_argument('--max_len', type=int, default=75, help='每个utterance的最大长度,超过指定长度则进行截断')
     parser.add_argument('--max_history_len', type=int, default=5, help="dialogue history的最大长度")
     parser.add_argument('--no_cuda', action='store_true', help='不使用GPU进行预测')
     parser.add_argument('--batch_size', type=int, default=5, help='批量生成response，然后经过MMI模型进行筛选')

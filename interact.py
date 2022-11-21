@@ -22,10 +22,18 @@ from torch.nn import CrossEntropyLoss
 from sklearn.model_selection import train_test_split
 import torch.nn.functional as F
 
+from flask import Flask
+from flask import request
+
+app=Flask(__name__)
+app.config['JSON_AS_ASCII'] = False
+
 PAD = '[PAD]'
 pad_id = 0
+history = []
 
 
+    
 def set_args():
     """
     Sets up the arguments.
@@ -34,12 +42,12 @@ def set_args():
     parser.add_argument('--device', default='0', type=str, required=False, help='生成设备')
     parser.add_argument('--temperature', default=1, type=float, required=False, help='生成的temperature')
     parser.add_argument('--topk', default=8, type=int, required=False, help='最高k选1')
-    parser.add_argument('--topp', default=0, type=float, required=False, help='最高积累概率')
+    parser.add_argument('--topp', default=0.7, type=float, required=False, help='最高积累概率')
     # parser.add_argument('--model_config', default='config/model_config_dialogue_small.json', type=str, required=False,
     #                     help='模型参数')
     parser.add_argument('--log_path', default='data/interact.log', type=str, required=False, help='interact日志存放位置')
     parser.add_argument('--vocab_path', default='vocab/vocab.txt', type=str, required=False, help='选择词库')
-    parser.add_argument('--model_path', default='model/epoch40', type=str, required=False, help='对话模型路径')
+    parser.add_argument('--model_path', default='model/', type=str, required=False, help='对话模型路径')
     parser.add_argument('--save_samples_path', default="sample/", type=str, required=False, help="保存聊天记录的文件路径")
     parser.add_argument('--repetition_penalty', default=1.0, type=float, required=False,
                         help="重复惩罚参数，若生成的对话重复性较高，可适当提高该参数")
@@ -108,34 +116,45 @@ def top_k_top_p_filtering(logits, top_k=0, top_p=0.0, filter_value=-float('Inf')
         logits[indices_to_remove] = filter_value
     return logits
 
-
-def main():
-    args = set_args()
-    logger = create_logger(args)
-    # 当用户使用GPU,并且GPU可用时
-    args.cuda = torch.cuda.is_available() and not args.no_cuda
-    device = 'cuda' if args.cuda else 'cpu'
-    logger.info('using device:{}'.format(device))
-    os.environ["CUDA_VISIBLE_DEVICES"] = args.device
-    tokenizer = BertTokenizerFast(vocab_file=args.vocab_path, sep_token="[SEP]", pad_token="[PAD]", cls_token="[CLS]")
+args = set_args()
+logger = create_logger(args)
+# 当用户使用GPU,并且GPU可用时
+args.cuda = torch.cuda.is_available() and not args.no_cuda
+device = 'cuda' if args.cuda else 'cpu'
+logger.info('using device:{}'.format(device))
+os.environ["CUDA_VISIBLE_DEVICES"] = args.device
+tokenizer = BertTokenizerFast(vocab_file=args.vocab_path, sep_token="[SEP]", pad_token="[PAD]", cls_token="[CLS]")
     # tokenizer = BertTokenizer(vocab_file=args.voca_path)
-    model = GPT2LMHeadModel.from_pretrained(args.model_path)
-    model = model.to(device)
-    model.eval()
-    if args.save_samples_path:
-        if not os.path.exists(args.save_samples_path):
-            os.makedirs(args.save_samples_path)
-        samples_file = open(args.save_samples_path + '/samples.txt', 'a', encoding='utf8')
-        samples_file.write("聊天记录{}:\n".format(datetime.now()))
+model = GPT2LMHeadModel.from_pretrained(args.model_path)
+model = model.to(device)
+model.eval()
+if args.save_samples_path:
+    if not os.path.exists(args.save_samples_path):
+        os.makedirs(args.save_samples_path)
+    samples_file = open(args.save_samples_path + '/samples.txt', 'a', encoding='utf8')
+    samples_file.write("聊天记录{}:\n".format(datetime.now()))
+    
     # 存储聊天记录，每个utterance以token的id的形式进行存储
-    history = []
-    print('开始和chatbot聊天，输入CTRL + Z以退出')
 
+    #print('开始和chatbot聊天，输入CTRL + Z以退出')
+    
+@app.route('/chat',methods=['GET'])
+def main():
+
+    is_first=True
+    chat_result=[]
     while True:
         try:
-            text = input("user:")
+
+            is_combo=random.random()
+            if is_first:
+                #text = input("user:")
+                text = request.args.get('text')
+                is_first=False
+            else:
+                text=''
             # text = "你好"
-            if args.save_samples_path:
+            if args.save_samples_path and text!='':
                 samples_file.write("user:{}\n".format(text))
             text_ids = tokenizer.encode(text, add_special_tokens=False)
             history.append(text_ids)
@@ -170,13 +189,19 @@ def main():
             history.append(response)
             text = tokenizer.convert_ids_to_tokens(response)
             print("chatbot:" + "".join(text))
+            chat_result.append("".join(text))
+            
             if args.save_samples_path:
                 samples_file.write("chatbot:{}\n".format("".join(text)))
+            if is_combo >=0.25:
+                break
+                
         except KeyboardInterrupt:
             if args.save_samples_path:
                 samples_file.close()
             break
-
+    return '||'.join(chat_result)
 
 if __name__ == '__main__':
-    main()
+    #main()
+    app.run(debug=False,port=11451)
